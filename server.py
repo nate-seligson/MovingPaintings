@@ -362,7 +362,7 @@ def control_video():
 @app.route('/local')
 def local_html():
     try:
-        return send_file('multi_video_interface.html')  # Update filename
+        return send_file('example.html')  # Update filename
     except FileNotFoundError:
         return jsonify({"error": "multi_video_interface.html file not found"}), 404
 
