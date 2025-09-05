@@ -26,36 +26,115 @@ class VideoItem:
         # Qt objects
         self.video_item = QGraphicsVideoItem()
         self.media_player = QMediaPlayer(None, QMediaPlayer.VideoSurface)
+        
+        # Enhanced looping timers
         self.loop_timer = QTimer()
+        self.position_check_timer = QTimer()
+        
+        # Looping state
+        self.duration = 0
+        self.is_looping = True
+        self.loop_point_ms = 50  # How close to end before looping (milliseconds)
         
         # Set up the video item with target size
         self.video_item.setSize(QSizeF(self.target_width, self.target_height))
         self.media_player.setVideoOutput(self.video_item)
         
-        # Set up looping
-        self.setup_looping()
+        # Set up enhanced looping
+        self.setup_enhanced_looping()
         
         # Load the video
         self.load_video()
     
-    def setup_looping(self):
-        """Set up seamless looping"""
+    def setup_enhanced_looping(self):
+        """Set up enhanced seamless looping with multiple fallback mechanisms"""
+        # Primary looping mechanism - position monitoring
         self.media_player.positionChanged.connect(self.check_near_end)
+        self.media_player.durationChanged.connect(self.on_duration_changed)
+        
+        # Secondary looping mechanism - media status monitoring
         self.media_player.mediaStatusChanged.connect(self.on_media_status_changed)
+        
+        # Tertiary looping mechanism - regular position checking timer
+        self.position_check_timer.timeout.connect(self.force_loop_check)
+        self.position_check_timer.start(100)  # Check every 100ms
+        
+        # Quaternary looping mechanism - backup timer
+        self.loop_timer.timeout.connect(self.backup_loop)
+    
+    def on_duration_changed(self, duration):
+        """Update duration and set backup timer"""
+        self.duration = duration
+        if self.duration > 0:
+            # Set backup timer to trigger slightly before video ends
+            backup_interval = max(self.duration - 200, 1000)  # 200ms before end, min 1 second
+            self.loop_timer.start(backup_interval)
+            print(f"Video {self.id}: Duration = {duration}ms, backup timer = {backup_interval}ms")
     
     def check_near_end(self, position):
-        """Check if we're near the end and prepare to loop"""
-        duration = self.media_player.duration()
-        if duration > 0 and position > duration - 100:  # 100ms before end
-            # Seek back to beginning for seamless loop
+        """Primary loop mechanism - check if we're near the end"""
+        if self.duration > 0 and self.is_looping:
+            # Multiple threshold checks for better reliability
+            time_remaining = self.duration - position
+            
+            if time_remaining <= self.loop_point_ms:
+                self.perform_loop()
+            elif time_remaining <= 200:  # Secondary threshold
+                self.perform_loop()
+    
+    def force_loop_check(self):
+        """Tertiary loop mechanism - forced position checking"""
+        if not self.is_looping or self.duration <= 0:
+            return
+            
+        current_position = self.media_player.position()
+        time_remaining = self.duration - current_position
+        
+        # Check if we're very close to the end
+        if time_remaining <= 150:  # 150ms threshold for forced check
+            self.perform_loop()
+    
+    def backup_loop(self):
+        """Quaternary loop mechanism - backup timer fallback"""
+        if self.is_looping:
+            print(f"Video {self.id}: Backup loop triggered")
+            self.perform_loop()
+    
+    def perform_loop(self):
+        """Perform the actual loop operation"""
+        try:
+            # Stop the backup timer to prevent multiple triggers
+            self.loop_timer.stop()
+            
+            # Seek to beginning
             self.media_player.setPosition(0)
+            
+            # Ensure we're still playing
+            if self.media_player.state() != QMediaPlayer.PlayingState:
+                self.media_player.play()
+            
+            # Restart backup timer if we have duration
+            if self.duration > 0:
+                backup_interval = max(self.duration - 200, 1000)
+                self.loop_timer.start(backup_interval)
+                
+            print(f"Video {self.id}: Loop performed")
+            
+        except Exception as e:
+            print(f"Video {self.id}: Error in perform_loop: {e}")
     
     def on_media_status_changed(self, status):
-        """Handle media status changes"""
-        if status == QMediaPlayer.EndOfMedia:
-            # Backup loop mechanism
-            self.media_player.setPosition(0)
-            self.media_player.play()
+        """Secondary loop mechanism - handle media status changes"""
+        if status == QMediaPlayer.EndOfMedia and self.is_looping:
+            print(f"Video {self.id}: EndOfMedia detected, looping...")
+            self.perform_loop()
+        elif status == QMediaPlayer.LoadedMedia:
+            print(f"Video {self.id}: Media loaded successfully")
+            # Start playing when media is loaded
+            if not self.media_player.state() == QMediaPlayer.PlayingState:
+                self.play()
+        elif status == QMediaPlayer.InvalidMedia:
+            print(f"Video {self.id}: Invalid media detected")
     
     def load_video(self):
         """Load the video file"""
@@ -68,20 +147,63 @@ class VideoItem:
             print(f"Error loading video {self.id}: {e}")
             return False
     
+    def swap_video(self, new_file_path):
+        """Swap the video file while maintaining position and transform settings"""
+        try:
+            # Stop current playback
+            self.media_player.stop()
+            
+            # Update file path
+            self.file_path = new_file_path
+            
+            # Load new video
+            media_content = QMediaContent(QUrl.fromLocalFile(new_file_path))
+            self.media_player.setMedia(media_content)
+            
+            # Reset duration and timers
+            self.duration = 0
+            self.loop_timer.stop()
+            
+            # Start playing the new video
+            self.play()
+            
+            print(f"Swapped video {self.id} to: {os.path.basename(new_file_path)}")
+            return True
+            
+        except Exception as e:
+            print(f"Error swapping video {self.id}: {e}")
+            return False
+    
     def play(self):
         """Start playing the video"""
-        self.media_player.play()
+        try:
+            self.is_looping = True
+            self.media_player.play()
+            print(f"Playing video {self.id}")
+        except Exception as e:
+            print(f"Error playing video {self.id}: {e}")
     
     def stop(self):
         """Stop the video"""
-        self.media_player.stop()
+        try:
+            self.is_looping = False
+            self.media_player.stop()
+            self.loop_timer.stop()
+            self.position_check_timer.stop()
+            print(f"Stopped video {self.id}")
+        except Exception as e:
+            print(f"Error stopping video {self.id}: {e}")
     
     def cleanup(self):
         """Clean up resources"""
-        self.stop()
-        self.media_player.setMedia(QMediaContent())
-        if self.video_item.scene():
-            self.video_item.scene().removeItem(self.video_item)
+        try:
+            self.stop()
+            self.media_player.setMedia(QMediaContent())
+            if self.video_item.scene():
+                self.video_item.scene().removeItem(self.video_item)
+            print(f"Cleaned up video {self.id}")
+        except Exception as e:
+            print(f"Error cleaning up video {self.id}: {e}")
 
 
 class VideoController(QObject):
@@ -91,6 +213,7 @@ class VideoController(QObject):
     rotation_changed = pyqtSignal(str, float)         # video_id, angle
     video_added = pyqtSignal(str, str, str)           # video_id, file_path, filename
     video_removed = pyqtSignal(str)                   # video_id
+    video_swapped = pyqtSignal(str, str)              # video_id, new_file_path
     
     def __init__(self, video_window):
         super().__init__()
@@ -101,6 +224,7 @@ class VideoController(QObject):
         self.rotation_changed.connect(self.video_window.set_video_rotation)
         self.video_added.connect(self.video_window.add_video)
         self.video_removed.connect(self.video_window.remove_video)
+        self.video_swapped.connect(self.video_window.swap_video)
 
 
 class VideoWindow(QMainWindow):
@@ -185,6 +309,22 @@ class VideoWindow(QMainWindow):
             return False
         except Exception as e:
             print(f"Error removing video {video_id}: {e}")
+            return False
+
+    def swap_video(self, video_id, new_file_path):
+        """Swap the video file for an existing video"""
+        try:
+            if video_id in self.videos:
+                video_item = self.videos[video_id]
+                success = video_item.swap_video(new_file_path)
+                if success:
+                    print(f"Successfully swapped video {video_id} to {os.path.basename(new_file_path)}")
+                return success
+            else:
+                print(f"Video {video_id} not found for swapping")
+                return False
+        except Exception as e:
+            print(f"Error swapping video {video_id}: {e}")
             return False
 
     def apply_transformations(self, video_id):

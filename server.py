@@ -172,10 +172,12 @@ def add_video():
         video_controller.video_added.emit(video_id, filepath, filename)
         
         # Store in database
+        preview_filename = os.path.basename(filepath)
         videos_db[video_id] = {
             'id': video_id,
             'name': filename,
             'filepath': filepath,
+            'preview_url': f"/video-preview/{preview_filename}",
             'x': 200,
             'y': 150,
             'scale_x': 1.0,
@@ -252,8 +254,15 @@ def swap_video():
         video_controller.video_swapped.emit(video_id, new_filepath)
         
         # Update database with new file info (keep position/scale/rotation)
+        old_name = videos_db[video_id]['name']
         videos_db[video_id]['filepath'] = new_filepath
         videos_db[video_id]['name'] = new_filename
+        
+        # Update preview URL
+        preview_filename = os.path.basename(new_filepath)
+        videos_db[video_id]['preview_url'] = f"/video-preview/{preview_filename}"
+        
+        print(f"Swapped video {video_id} from '{old_name}' to '{new_filename}'")
         
         return jsonify({
             "success": True,
@@ -265,6 +274,9 @@ def swap_video():
         import traceback
         traceback.print_exc()
         return jsonify({"error": f"Failed to swap video: {str(e)}"}), 500
+
+@app.route('/get-videos')
+def get_videos():
     """Get list of all videos"""
     try:
         # Get current state from Qt window if available
@@ -362,9 +374,9 @@ def control_video():
 @app.route('/local')
 def local_html():
     try:
-        return send_file('example.html')  # Update filename
+        return send_file('multi_video_interface.html')  # Update to match your HTML filename
     except FileNotFoundError:
-        return jsonify({"error": "multi_video_interface.html file not found"}), 404
+        return jsonify({"error": "multi_video_interface.html file not found. Make sure the HTML file is in the same directory as this Flask app."}), 404
 
 # Option 2: Serve an external HTML file via URL
 @app.route('/external')
@@ -386,11 +398,22 @@ def home():
         <li>Add multiple videos to one screen</li>
         <li>Control each video individually (position, scale, rotation)</li>
         <li>Upload custom videos</li>
+        <li>Swap videos while maintaining position/scale/rotation</li>
         <li>Remove videos from display</li>
         <li>Consistent video sizing regardless of aspect ratio</li>
-        <li>Seamless video looping</li>
+        <li>Enhanced seamless video looping with multiple fallback mechanisms</li>
     </ul>
-    <p>Send POST requests to /control-video with JSON data:</p>
+    <p>API Endpoints:</p>
+    <ul>
+        <li>POST /control-video - Control video position/scale/rotation</li>
+        <li>POST /upload-video - Upload new video files</li>
+        <li>POST /add-video - Add uploaded video to display</li>
+        <li>POST /swap-video - Swap video file while keeping position</li>
+        <li>POST /remove-video - Remove video from display</li>
+        <li>GET /get-videos - Get list of all videos</li>
+        <li>GET /screen-dimensions - Get display screen dimensions</li>
+    </ul>
+    <p>Control JSON format:</p>
     <pre>
     Position: {"video_id": "uuid", "type": "position", "x": 100, "y": 50}
     Scale: {"video_id": "uuid", "type": "scale", "x": 0.8, "y": 0.8}
@@ -412,11 +435,14 @@ def status():
         "screen_dimensions": {"width": width, "height": height},
         "videos_count": len(videos_db),
         "videos": list(videos_db.keys()),
-        "upload_folder": os.path.abspath(app.config['UPLOAD_FOLDER'])
+        "upload_folder": os.path.abspath(app.config['UPLOAD_FOLDER']),
+        "allowed_extensions": list(ALLOWED_EXTENSIONS),
+        "max_file_size_mb": MAX_FILE_SIZE // (1024 * 1024)
     })
 
 if __name__ == '__main__':
     print("Starting Multi-Video Control Server...")
+    print("Enhanced features: Seamless looping + Video swapping")
     
     # Start Qt application in a separate daemon thread
     qt_thread = threading.Thread(target=setup_qt_app, daemon=True)
@@ -434,18 +460,25 @@ if __name__ == '__main__':
     
     if video_controller is None:
         print("WARNING: Qt application may not have initialized properly")
+        print("Try restarting the server if videos don't display correctly")
     else:
         print("Qt application initialized successfully")
+        print("Enhanced looping mechanisms active:")
+        print("  - Position-based loop detection")
+        print("  - Media status monitoring")
+        print("  - Regular position checking (100ms)")
+        print("  - Backup timer fallback")
     
     # Get local IP automatically
     host_ip = get_local_ip()
     port = 5000
     
-    print(f"Starting Flask server on {host_ip}:{port}")
+    print(f"\nStarting Flask server on {host_ip}:{port}")
     print(f"Control interface: http://{host_ip}:{port}/local")
-    print(f"Send control commands to: http://{host_ip}:{port}/control-video")
-    print(f"Upload videos to: http://{host_ip}:{port}/upload-video")
-    print(f"Check status at: http://{host_ip}:{port}/status")
+    print(f"Server status: http://{host_ip}:{port}/status")
+    print(f"API endpoints available at: http://{host_ip}:{port}")
+    print("\nSupported video formats:", ', '.join(ALLOWED_EXTENSIONS))
+    print(f"Max file size: {MAX_FILE_SIZE // (1024 * 1024)}MB")
     
     try:
         app.run(host=host_ip, port=port, debug=False, threaded=True)

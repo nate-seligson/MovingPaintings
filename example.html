@@ -50,9 +50,6 @@
             margin-bottom: 10px;
             cursor: pointer;
             transition: all 0.3s ease;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
         }
         
         .video-item:hover {
@@ -66,13 +63,13 @@
         }
         
         .video-item-info {
-            flex-grow: 1;
-            margin-right: 10px;
+            margin-bottom: 10px;
         }
         
         .video-item-name {
             font-weight: bold;
             color: #333;
+            margin-bottom: 5px;
         }
         
         .video-item-id {
@@ -80,14 +77,38 @@
             color: #666;
         }
         
-        .remove-video-btn {
-            background: #dc3545;
-            color: white;
+        .video-item-actions {
+            display: flex;
+            gap: 5px;
+        }
+        
+        .video-action-btn {
             border: none;
             padding: 5px 10px;
             border-radius: 3px;
             cursor: pointer;
             font-size: 12px;
+            flex: 1;
+        }
+        
+        .swap-video-btn {
+            background: #ffc107;
+            color: #212529;
+        }
+        
+        .swap-video-btn:hover {
+            background: #e0a800;
+        }
+        
+        .swap-video-btn:disabled {
+            background: #6c757d;
+            color: white;
+            cursor: not-allowed;
+        }
+        
+        .remove-video-btn {
+            background: #dc3545;
+            color: white;
         }
         
         .remove-video-btn:hover {
@@ -312,6 +333,11 @@
             background: #f8f8f8;
             border-radius: 8px;
         }
+
+        /* Swap file input styles */
+        .swap-file-input {
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -427,12 +453,16 @@
                 <div id="status" class="status" style="display: none;"></div>
             </div>
         </div>
+
+        <!-- Hidden file input for swapping videos -->
+        <input type="file" id="swapVideoFile" class="swap-file-input" accept="video/*" />
     </div>
 
     <script>
         // State management
         let videos = {};  // Store all video data
         let selectedVideoId = null;
+        let currentSwapVideoId = null; // Track which video we're swapping
         let screenWidth = 1920;
         let screenHeight = 1080;
         let previewScale = 1;
@@ -465,6 +495,14 @@
             const file = e.target.files[0];
             if (file) {
                 document.getElementById('uploadStatus').textContent = `Selected: ${file.name}`;
+            }
+        });
+
+        // Swap video file input handler
+        document.getElementById('swapVideoFile').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file && currentSwapVideoId) {
+                swapVideoFile(currentSwapVideoId, file);
             }
         });
         
@@ -593,6 +631,94 @@
                 progressFill.style.width = '0%';
             }
         }
+
+        // Swap video function
+        function swapVideo(videoId) {
+            currentSwapVideoId = videoId;
+            document.getElementById('swapVideoFile').click();
+        }
+
+        // Swap video file
+        async function swapVideoFile(videoId, file) {
+            const formData = new FormData();
+            formData.append('video', file);
+            
+            const progressBar = document.getElementById('progressBar');
+            const progressFill = document.getElementById('progressFill');
+            
+            progressBar.style.display = 'block';
+            
+            try {
+                const xhr = new XMLHttpRequest();
+                
+                xhr.upload.addEventListener('progress', (e) => {
+                    if (e.lengthComputable) {
+                        const percentComplete = (e.loaded / e.total) * 100;
+                        progressFill.style.width = percentComplete + '%';
+                    }
+                });
+                
+                xhr.addEventListener('load', async () => {
+                    if (xhr.status === 200) {
+                        const result = JSON.parse(xhr.responseText);
+                        
+                        // Swap video on server
+                        const swapResponse = await fetch('/swap-video', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                video_id: videoId,
+                                filepath: result.filepath,
+                                filename: result.filename
+                            })
+                        });
+                        
+                        const swapResult = await swapResponse.json();
+                        
+                        if (swapResult.success) {
+                            // Update local state
+                            videos[videoId].name = file.name;
+                            videos[videoId].filepath = result.filepath;
+                            videos[videoId].preview_url = result.preview_url;
+                            
+                            // Update preview
+                            const videoElement = document.querySelector(`#video-preview-${videoId} .video-preview`);
+                            if (videoElement) {
+                                videoElement.src = result.preview_url;
+                            }
+                            
+                            updateVideoList();
+                            showStatus(`Video swapped successfully to "${file.name}"!`, 'success');
+                        } else {
+                            showStatus(swapResult.error || 'Swap failed', 'error');
+                        }
+                    } else {
+                        const error = JSON.parse(xhr.responseText);
+                        showStatus(error.error || 'Upload failed', 'error');
+                    }
+                    
+                    progressBar.style.display = 'none';
+                    progressFill.style.width = '0%';
+                    currentSwapVideoId = null;
+                });
+                
+                xhr.addEventListener('error', () => {
+                    showStatus('Swap failed: Network error', 'error');
+                    progressBar.style.display = 'none';
+                    progressFill.style.width = '0%';
+                    currentSwapVideoId = null;
+                });
+                
+                xhr.open('POST', '/upload-video');
+                xhr.send(formData);
+                
+            } catch (error) {
+                showStatus('Swap failed: ' + error.message, 'error');
+                progressBar.style.display = 'none';
+                progressFill.style.width = '0%';
+                currentSwapVideoId = null;
+            }
+        }
         
         // Remove video
         async function removeVideo(videoId) {
@@ -624,10 +750,6 @@
                     // Clear selection if this was selected
                     if (selectedVideoId === videoId) {
                         selectedVideoId = null;
-                        // Disable swap button
-                        const swapBtn = document.getElementById('swapVideoBtn');
-                        swapBtn.disabled = true;
-                        swapBtn.style.background = '#6c757d';
                         updateControlPanel();
                     }
                     
@@ -699,7 +821,10 @@
                         <div class="video-item-name">${video.name}</div>
                         <div class="video-item-id">ID: ${video.id.substring(0, 8)}...</div>
                     </div>
-                    <button class="remove-video-btn" onclick="event.stopPropagation(); removeVideo('${video.id}')">Remove</button>
+                    <div class="video-item-actions">
+                        <button class="video-action-btn swap-video-btn" onclick="event.stopPropagation(); swapVideo('${video.id}')">Swap</button>
+                        <button class="video-action-btn remove-video-btn" onclick="event.stopPropagation(); removeVideo('${video.id}')">Remove</button>
+                    </div>
                 `;
                 
                 list.appendChild(item);
