@@ -11,7 +11,7 @@ class VideoWindow(QMainWindow):
         super().__init__()
 
         # --- EDIT THIS to set the video file path ---
-        self.video_file = "/home/pil/Downloads/MovingPaintings/65562-515098354_medium.mp4"  # <--- change this
+        self.video_file = "/home/pil/Downloads/MovingPaintings/65562-515098354_medium.mp4"
         # ------------------------------------------------------------------
 
         # --- EDIT THESE to set transform in code ---
@@ -26,8 +26,8 @@ class VideoWindow(QMainWindow):
 
     def initUI(self):
         self.setWindowTitle('')
-        self.setGeometry(100, 100, 800, 600)
-        self.setStyleSheet("background-color: black;")  # make background black
+        self.showFullScreen()  # fullscreen window
+        self.setStyleSheet("background-color: black;")
 
         # Graphics view + scene
         self.graphics_view = QGraphicsView(self)
@@ -52,10 +52,17 @@ class VideoWindow(QMainWindow):
         self.graphics_scene.addItem(self.video_item)
         self.media_player.setVideoOutput(self.video_item)
 
-        # Apply transform and play
-        self.update_video_item_size()
-        self.apply_transformations()
+        # Wait for media to load to get pixel size
+        self.media_player.mediaStatusChanged.connect(self.on_media_status_changed)
         self.media_player.play()
+
+    def on_media_status_changed(self, status):
+        if status == QMediaPlayer.LoadedMedia:
+            # Set the video to its native pixel size
+            video_size = self.media_player.metaData("Resolution")
+            if video_size is not None:
+                self.video_item.setSize(QSizeF(video_size.width(), video_size.height()))
+                self.apply_transformations()
 
     def apply_transformations(self):
         transform = QTransform()
@@ -64,14 +71,10 @@ class VideoWindow(QMainWindow):
         transform.scale(self.scale_x, self.scale_y)
         self.video_item.setTransform(transform)
 
-    def update_video_item_size(self):
-        viewport_size = self.graphics_view.viewport().size()
-        self.video_item.setSize(QSizeF(viewport_size.width(), viewport_size.height()))
-
+    # Override resizeEvent but do nothing to prevent scaling with window
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        self.graphics_view.fitInView(self.graphics_scene.sceneRect(), Qt.KeepAspectRatio)
-        self.update_video_item_size()
+        # Keep the video pixel size constant
         self.apply_transformations()
 
 
