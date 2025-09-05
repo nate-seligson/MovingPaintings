@@ -1,5 +1,5 @@
 from flask import Flask, send_file, render_template_string, request, jsonify, send_from_directory
-import socket
+import requests
 from screen import VideoWindow, VideoController
 import sys
 import threading
@@ -187,50 +187,20 @@ def status():
         "videos_count": len(videos_db)
     })
 
-def get_lan_ip():
-    """
-    Returns LAN IP of the machine and the hostname.
-    """
-    try:
-        hostname = socket.gethostname()
-        ip = socket.gethostbyname(hostname)
-        # If the IP looks like localhost, fallback to dummy connect
-        if ip.startswith("127."):
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.connect(("10.255.255.255", 1))
-            ip = s.getsockname()[0]
-            s.close()
-        return ip
-    except:
-        return "127.0.0.1"
-
 # ----------------------- Main -----------------------
 if __name__ == '__main__':
-    print("Starting Multi-Video Control Server...")
-
-    qt_thread = threading.Thread(target=setup_qt_app, daemon=True)
-    qt_thread.start()
-
-    # Wait for Qt
-    print("Waiting for Qt app to initialize...")
-    max_wait = 10
-    for i in range(max_wait):
-        if video_controller: break
-        time.sleep(1)
-        print(f"Waiting... {i+1}/{max_wait}")
-
     port = 5000
-    lan_ip = get_lan_ip()  # Detect LAN IP automatically
-    print(f"\nFlask server running on all LAN interfaces, port {port}")
-    print(f"Access the control interface via: http://{lan_ip}:{port}/local")
-    print(f"Check server status via: http://{lan_ip}:{port}/status")
 
+    # Detect public IP
     try:
-        # Bind to all interfaces so LAN devices can connect
-        app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
-    except KeyboardInterrupt:
-        print("Shutting down server...")
+        public_ip = requests.get("https://api.ipify.org").text.strip()
     except Exception as e:
-        print(f"Server error: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"Could not fetch public IP: {e}")
+        public_ip = "UNKNOWN"
+
+    print(f"\nFlask server is running!")
+    print(f"Access (LAN/private): http://127.0.0.1:{port}/local")
+    print(f"Access (Public):      http://{public_ip}:{port}/local\n")
+
+    # Start server on all interfaces (LAN + WAN)
+    app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
