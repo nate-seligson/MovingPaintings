@@ -449,10 +449,8 @@ def status():
         "allowed_extensions": list(ALLOWED_EXTENSIONS),
         "max_file_size_mb": MAX_FILE_SIZE // (1024 * 1024)
     })
-
 if __name__ == '__main__':
-    print("Starting Multi-Video Control Server...")
-    print("Enhanced features: Seamless looping + Video swapping")
+    print("Starting Multi-Video Control Server (LAN mode)...")
     
     # Start Qt application in a separate daemon thread
     qt_thread = threading.Thread(target=setup_qt_app, daemon=True)
@@ -460,9 +458,8 @@ if __name__ == '__main__':
     
     # Wait for Qt to initialize
     print("Waiting for Qt application to initialize...")
-    max_wait = 10  # Wait up to 10 seconds
+    max_wait = 10  # seconds
     wait_count = 0
-    
     while video_controller is None and wait_count < max_wait:
         time.sleep(1)
         wait_count += 1
@@ -470,28 +467,20 @@ if __name__ == '__main__':
     
     if video_controller is None:
         print("WARNING: Qt application may not have initialized properly")
-        print("Try restarting the server if videos don't display correctly")
     else:
         print("Qt application initialized successfully")
-        print("Enhanced looping mechanisms active:")
-        print("  - Position-based loop detection")
-        print("  - Media status monitoring")
-        print("  - Regular position checking (100ms)")
-        print("  - Backup timer fallback")
     
-    # Get local IP automatically
-    host_ip = get_local_ip()
+    # Detect LAN IP automatically
+    lan_ip = get_local_ip()
     port = 5000
     
-    print(f"\nStarting Flask server on {host_ip}:{port}")
-    print(f"Control interface: http://{host_ip}:{port}/local")
-    print(f"Server status: http://{host_ip}:{port}/status")
-    print(f"API endpoints available at: http://{host_ip}:{port}")
-    print("\nSupported video formats:", ', '.join(ALLOWED_EXTENSIONS))
-    print(f"Max file size: {MAX_FILE_SIZE // (1024 * 1024)}MB")
+    print(f"\nFlask server running on LAN IP: {lan_ip}:{port}")
+    print(f"Access the control interface: http://{lan_ip}:{port}/local")
+    print(f"Check server status: http://{lan_ip}:{port}/status")
     
     try:
-        app.run(host=host_ip, port=port, debug=False, threaded=True)
+        # Bind to all interfaces so LAN devices can connect
+        app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
     except KeyboardInterrupt:
         print("\nShutting down server...")
     except Exception as e:
