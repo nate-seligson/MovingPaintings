@@ -1,11 +1,12 @@
 from flask import Flask, send_file, render_template_string, request, jsonify, send_from_directory
 import requests
-from screen import VideoWindow  # Make sure this imports your fixed VideoWindow
+from screen import VideoWindow, VideoController  # Import the updated VideoWindow
 import sys
 import socket
 import threading
 import time
 import os
+import uuid
 from werkzeug.utils import secure_filename
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtCore import QMetaObject, Qt, QObject, pyqtSignal, pyqtSlot, QUrl
@@ -27,54 +28,10 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 # Global video window reference
 window = None
 qt_app = None
-current_video_path = None
-
-class VideoController(QObject):
-    """Qt object to handle video control signals safely in the Qt thread"""
-    position_changed = pyqtSignal(float, float)
-    scale_changed = pyqtSignal(float, float)
-    rotation_changed = pyqtSignal(float)
-    video_changed = pyqtSignal(str)
-    
-    def __init__(self, video_window):
-        super().__init__()
-        self.video_window = video_window
-        # Connect signals to slots
-        self.position_changed.connect(self.set_position)
-        self.scale_changed.connect(self.set_scale)
-        self.rotation_changed.connect(self.set_rotation)
-        self.video_changed.connect(self.change_video)
-    
-    @pyqtSlot(float, float)
-    def set_position(self, x, y):
-        if self.video_window:
-            self.video_window.set_video_position(x, y)
-    
-    @pyqtSlot(float, float)
-    def set_scale(self, x, y):
-        if self.video_window:
-            self.video_window.set_video_scale(x, y)
-    
-    @pyqtSlot(float)
-    def set_rotation(self, angle):
-        if self.video_window:
-            self.video_window.set_video_rotation(angle)
-    
-    @pyqtSlot(str)
-    def change_video(self, file_path):
-        if self.video_window:
-            try:
-                # Clear the current playlist and add the new video
-                self.video_window.playlist.clear()
-                self.video_window.playlist.addMedia(QMediaContent(QUrl.fromLocalFile(file_path)))
-                self.video_window.playlist.setCurrentIndex(0)
-                self.video_window.media_player.play()
-                print(f"Video changed to: {file_path}")
-            except Exception as e:
-                print(f"Error changing video: {e}")
-
-# Global controller
 video_controller = None
+
+# Store video information server-side
+videos_db = {}  # video_id -> video_info
 
 def allowed_file(filename):
     """Check if file extension is allowed"""
@@ -122,11 +79,6 @@ def setup_qt_app():
         width, height = get_screen_dimensions()
         print(f"Screen dimensions: {width}x{height}")
         
-        # Example of initial positioning
-        window.set_video_position(200, 150)
-        window.set_video_scale(1.0, 1.0)
-        window.set_video_rotation(0)
-        
         qt_app.exec_()
         
     except Exception as e:
@@ -147,7 +99,7 @@ def screen_dimensions():
 @app.route('/upload-video', methods=['POST'])
 def upload_video():
     """Handle video upload"""
-    global current_video_path, video_controller
+    global video_controller
     
     # Check if video_controller is initialized
     if not video_controller:
@@ -177,19 +129,15 @@ def upload_video():
             
             # Get absolute path
             absolute_path = os.path.abspath(filepath)
-            current_video_path = absolute_path
             
-            # Change the video in the Qt window
-            video_controller.video_changed.emit(absolute_path)
-            
-            # Generate preview URL (you might want to extract a frame here)
+            # Generate preview URL
             preview_url = f"/video-preview/{filename}"
             
             return jsonify({
                 "success": True,
                 "message": f"Video uploaded successfully: {filename}",
                 "filename": filename,
-                "filepath": filepath,
+                "filepath": absolute_path,
                 "preview_url": preview_url
             })
             
@@ -201,6 +149,117 @@ def upload_video():
     
     return jsonify({"error": f"Invalid file type. Allowed types: {', '.join(ALLOWED_EXTENSIONS)}"}), 400
 
+@app.route('/add-video', methods=['POST'])
+def add_video():
+    """Add a video to the display"""
+    global video_controller, videos_db
+    
+    if not video_controller:
+        return jsonify({"error": "Video window not initialized"}), 500
+    
+    try:
+        data = request.get_json()
+        filepath = data.get('filepath')
+        filename = data.get('filename')
+        
+        if not filepath or not os.path.exists(filepath):
+            return jsonify({"error": "Video file not found"}), 400
+        
+        # Generate unique video ID
+        video_id = str(uuid.uuid4())
+        
+        # Add to Qt window
+        video_controller.video_added.emit(video_id, filepath, filename)
+        
+        # Store in database
+        videos_db[video_id] = {
+            'id': video_id,
+            'name': filename,
+            'filepath': filepath,
+            'x': 200,
+            'y': 150,
+            'scale_x': 1.0,
+            'scale_y': 1.0,
+            'rotation': 0
+        }
+        
+        return jsonify({
+            "success": True,
+            "video_id": video_id,
+            "message": f"Video added successfully: {filename}"
+        })
+        
+    except Exception as e:
+        print(f"Error adding video: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": f"Failed to add video: {str(e)}"}), 500
+
+@app.route('/remove-video', methods=['POST'])
+def remove_video():
+    """Remove a video from the display"""
+    global video_controller, videos_db
+    
+    if not video_controller:
+        return jsonify({"error": "Video window not initialized"}), 500
+    
+    try:
+        data = request.get_json()
+        video_id = data.get('video_id')
+        
+        if not video_id or video_id not in videos_db:
+            return jsonify({"error": "Video not found"}), 400
+        
+        # Remove from Qt window
+        video_controller.video_removed.emit(video_id)
+        
+        # Remove from database
+        video_name = videos_db[video_id]['name']
+        del videos_db[video_id]
+        
+        return jsonify({
+            "success": True,
+            "message": f"Video removed successfully: {video_name}"
+        })
+        
+    except Exception as e:
+        print(f"Error removing video: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": f"Failed to remove video: {str(e)}"}), 500
+
+@app.route('/get-videos')
+def get_videos():
+    """Get list of all videos"""
+    try:
+        # Get current state from Qt window if available
+        if window:
+            qt_videos_info = window.get_videos_info()
+            # Update our database with current positions/scales
+            for video_info in qt_videos_info:
+                video_id = video_info['id']
+                if video_id in videos_db:
+                    videos_db[video_id].update({
+                        'x': video_info['x'],
+                        'y': video_info['y'],
+                        'scale_x': video_info['scale_x'],
+                        'scale_y': video_info['scale_y'],
+                        'rotation': video_info['rotation']
+                    })
+        
+        return jsonify({
+            "success": True,
+            "videos": list(videos_db.values())
+        })
+        
+    except Exception as e:
+        print(f"Error getting videos: {e}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "videos": []
+        })
+
 @app.route('/video-preview/<filename>')
 def video_preview(filename):
     """Serve uploaded video files for preview"""
@@ -209,10 +268,10 @@ def video_preview(filename):
     except FileNotFoundError:
         return jsonify({"error": "Video file not found"}), 404
 
-@app.route('/control', methods=['POST'])
+@app.route('/control-video', methods=['POST'])
 def control_video():
-    """Handle video control commands"""
-    global video_controller
+    """Handle video control commands for specific videos"""
+    global video_controller, videos_db
     
     if not video_controller:
         return jsonify({"error": "Video window not initialized"}), 500
@@ -223,25 +282,37 @@ def control_video():
         if not data:
             return jsonify({"error": "No JSON data received"}), 400
         
+        video_id = data.get('video_id')
         command_type = data.get('type')
+        
+        if not video_id or video_id not in videos_db:
+            return jsonify({"error": "Video not found"}), 400
         
         if command_type == 'position':
             x = float(data.get('x', 0))
             y = float(data.get('y', 0))
             # Use Qt signal to safely call from another thread
-            video_controller.position_changed.emit(x, y)
-            return jsonify({"success": True, "message": f"Position set to ({x}, {y})"})
+            video_controller.position_changed.emit(video_id, x, y)
+            # Update database
+            videos_db[video_id]['x'] = x
+            videos_db[video_id]['y'] = y
+            return jsonify({"success": True, "message": f"Position set to ({x}, {y}) for video {video_id}"})
             
         elif command_type == 'scale':
             x = float(data.get('x', 1.0))
             y = float(data.get('y', 1.0))
-            video_controller.scale_changed.emit(x, y)
-            return jsonify({"success": True, "message": f"Scale set to ({x}, {y})"})
+            video_controller.scale_changed.emit(video_id, x, y)
+            # Update database
+            videos_db[video_id]['scale_x'] = x
+            videos_db[video_id]['scale_y'] = y
+            return jsonify({"success": True, "message": f"Scale set to ({x}, {y}) for video {video_id}"})
             
         elif command_type == 'rotation':
             z = float(data.get('z', 0))
-            video_controller.rotation_changed.emit(z)
-            return jsonify({"success": True, "message": f"Rotation set to {z} degrees"})
+            video_controller.rotation_changed.emit(video_id, z)
+            # Update database
+            videos_db[video_id]['rotation'] = z
+            return jsonify({"success": True, "message": f"Rotation set to {z} degrees for video {video_id}"})
             
         else:
             return jsonify({"error": f"Unknown command type: {command_type}"}), 400
@@ -256,9 +327,9 @@ def control_video():
 @app.route('/local')
 def local_html():
     try:
-        return send_file('example.html')  # Make sure to save the HTML as example.html
+        return send_file('multi_video_interface.html')  # Update filename
     except FileNotFoundError:
-        return jsonify({"error": "example.html file not found"}), 404
+        return jsonify({"error": "multi_video_interface.html file not found"}), 404
 
 # Option 2: Serve an external HTML file via URL
 @app.route('/external')
@@ -274,27 +345,29 @@ def external_html():
 def home():
     """Basic home route with usage information"""
     return """
-    <h1>Video Control Server</h1>
+    <h1>Multi-Video Control Server</h1>
     <p>Features:</p>
     <ul>
-        <li>Control video position, scale, and rotation</li>
+        <li>Add multiple videos to one screen</li>
+        <li>Control each video individually (position, scale, rotation)</li>
         <li>Upload custom videos</li>
-        <li>Adaptive preview based on screen aspect ratio</li>
-        <li>Precise numeric input controls</li>
+        <li>Remove videos from display</li>
+        <li>Consistent video sizing regardless of aspect ratio</li>
+        <li>Seamless video looping</li>
     </ul>
-    <p>Send POST requests to /control with JSON data:</p>
+    <p>Send POST requests to /control-video with JSON data:</p>
     <pre>
-    Position: {"type": "position", "x": 100, "y": 50}
-    Scale: {"type": "scale", "x": 0.8, "y": 0.8}
-    Rotation: {"type": "rotation", "z": 45}
+    Position: {"video_id": "uuid", "type": "position", "x": 100, "y": 50}
+    Scale: {"video_id": "uuid", "type": "scale", "x": 0.8, "y": 0.8}
+    Rotation: {"video_id": "uuid", "type": "rotation", "z": 45}
     </pre>
-    <p><a href="/local">Open Control Interface</a></p>
+    <p><a href="/local">Open Multi-Video Control Interface</a></p>
     """
 
 @app.route('/status')
 def status():
     """Check server status"""
-    global window, video_controller, current_video_path
+    global window, video_controller, videos_db
     width, height = get_screen_dimensions()
     return jsonify({
         "qt_app_running": qt_app is not None,
@@ -302,12 +375,13 @@ def status():
         "video_controller_ready": video_controller is not None,
         "window_visible": window.isVisible() if window else False,
         "screen_dimensions": {"width": width, "height": height},
-        "current_video": current_video_path,
+        "videos_count": len(videos_db),
+        "videos": list(videos_db.keys()),
         "upload_folder": os.path.abspath(app.config['UPLOAD_FOLDER'])
     })
 
 if __name__ == '__main__':
-    print("Starting Video Control Server...")
+    print("Starting Multi-Video Control Server...")
     
     # Start Qt application in a separate daemon thread
     qt_thread = threading.Thread(target=setup_qt_app, daemon=True)
@@ -334,7 +408,7 @@ if __name__ == '__main__':
     
     print(f"Starting Flask server on {host_ip}:{port}")
     print(f"Control interface: http://{host_ip}:{port}/local")
-    print(f"Send control commands to: http://{host_ip}:{port}/control")
+    print(f"Send control commands to: http://{host_ip}:{port}/control-video")
     print(f"Upload videos to: http://{host_ip}:{port}/upload-video")
     print(f"Check status at: http://{host_ip}:{port}/status")
     
