@@ -10,7 +10,75 @@ from werkzeug.utils import secure_filename
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtCore import QMetaObject, Qt, QObject, pyqtSignal, pyqtSlot, QUrl
 from PyQt5.QtMultimedia import QMediaContent
+# Additional Raspberry Pi optimization settings
+# Add these at the top of your server.py file
 
+import os
+import sys
+
+def optimize_for_raspberry_pi():
+    """Apply Raspberry Pi specific optimizations"""
+    
+    # Set environment variables for better performance
+    os.environ['QT_QUICK_BACKEND'] = 'software'  # Use software rendering
+    os.environ['QT_GRAPHICSSYSTEM'] = 'raster'   # Use raster graphics system
+    os.environ['QT_XCB_GL_INTEGRATION'] = 'none' # Disable OpenGL integration
+    
+    # Disable Qt debug output for better performance
+    os.environ['QT_LOGGING_RULES'] = '*.debug=false'
+    
+    # Set video decoder preferences (hardware acceleration if available)
+    os.environ['QT_GSTREAMER_USE_PLAYBIN_VOLUME'] = '1'
+    
+    # Memory management
+    os.environ['QT_QPA_PLATFORM'] = 'xcb'  # Use X11 backend
+    
+    print("Applied Raspberry Pi optimizations")
+
+def configure_video_settings():
+    """Configure optimal video settings for Raspberry Pi"""
+    return {
+        'max_videos': 4,  # Limit concurrent videos
+        'video_resolution': (640, 480),  # Lower resolution for better performance
+        'frame_rate': 30,  # Cap frame rate
+        'buffer_size': 5,  # Smaller buffer
+        'threads': 2,  # Limit thread count
+    }
+
+# System optimization commands to run on Raspberry Pi:
+"""
+# Add these to /boot/config.txt for better video performance:
+gpu_mem=128          # Allocate more RAM to GPU
+disable_overscan=1   # Disable overscan
+hdmi_force_hotplug=1 # Force HDMI output
+hdmi_group=1         # HDMI group
+hdmi_mode=16         # 1080p 60Hz
+max_usb_current=1    # Enable higher USB current
+
+# Add these to /etc/rc.local for CPU optimization:
+echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
+
+# Install hardware acceleration packages:
+sudo apt-get install libgl1-mesa-dri
+sudo apt-get install va-driver-all
+sudo apt-get install gstreamer1.0-vaapi
+
+# For better video codec support:
+sudo apt-get install gstreamer1.0-plugins-bad
+sudo apt-get install gstreamer1.0-plugins-ugly
+sudo apt-get install gstreamer1.0-libav
+"""
+
+# Modified server.py startup section:
+if __name__ == '__main__':
+    # Apply Raspberry Pi optimizations before starting Qt
+    optimize_for_raspberry_pi()
+    
+    # Rest of your server startup code...
+    import socket
+    print("Starting Optimized Multi-Video Control Server for Raspberry Pi...")
+    
+    # ... rest of your existing server code
 app = Flask(__name__)
 
 # Configuration
