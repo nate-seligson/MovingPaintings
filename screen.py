@@ -243,15 +243,14 @@ class VideoWindow(QMainWindow):
         self.standard_video_height = 150
         
         self.initUI()
+        
+        # Get initial screen dimensions after UI is set up
+        self.update_screen_dimensions()
 
     def initUI(self):
         self.setWindowTitle('Multi-Video Display')
         self.showFullScreen()
         self.setStyleSheet("background-color: black;")
-
-        # Get screen dimensions
-        self.screen_width = self.width()
-        self.screen_height = self.height()
 
         # Graphics view + scene
         self.graphics_view = QGraphicsView(self)
@@ -259,13 +258,28 @@ class VideoWindow(QMainWindow):
         self.graphics_view.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.setCentralWidget(self.graphics_view)
 
-        # Set scene to match screen size
-        self.graphics_scene = QGraphicsScene(0, 0, self.screen_width, self.screen_height)
+        # Set scene - initial dimensions will be updated
+        self.graphics_scene = QGraphicsScene()
         self.graphics_scene.setBackgroundBrush(QColor("black"))
         self.graphics_view.setScene(self.graphics_scene)
 
-        # Fit the view to the scene
+    def update_screen_dimensions(self):
+        """Update screen dimensions and refresh all video positions"""
+        old_width, old_height = self.screen_width, self.screen_height
+        
+        self.screen_width = self.width() if self.width() > 0 else 1920
+        self.screen_height = self.height() if self.height() > 0 else 1080
+        
+        # Update scene size
+        self.graphics_scene.setSceneRect(0, 0, self.screen_width, self.screen_height)
         self.graphics_view.fitInView(self.graphics_scene.sceneRect(), Qt.KeepAspectRatio)
+        
+        if old_width != self.screen_width or old_height != self.screen_height:
+            print(f"Screen dimensions updated: {self.screen_width}x{self.screen_height}")
+            
+            # Reapply all transformations with new dimensions
+            for video_id in self.videos:
+                self.apply_transformations(video_id)
 
     def add_video(self, video_id, file_path, filename):
         """Add a new video to the display"""
@@ -339,32 +353,35 @@ class VideoWindow(QMainWindow):
             self.screen_width = self.width() if self.width() > 0 else 1920
             self.screen_height = self.height() if self.height() > 0 else 1080
 
-        # Calculate actual pixel positions from normalized values (0-400 -> 0-screen_width)
+        # Calculate actual pixel positions from normalized values
+        # Position represents the CENTER of the video
         actual_x = (video_item.x / 400.0) * self.screen_width
         actual_y = (video_item.y / 300.0) * self.screen_height
 
         # Create transform
         transform = QTransform()
         
-        # Calculate the center of the standardized video size (not original video size)
-        video_center_x = self.standard_video_width * video_item.scale_x / 2
-        video_center_y = self.standard_video_height * video_item.scale_y / 2
+        # Use UNSCALED center - this is the key fix!
+        video_center_x = self.standard_video_width / 2
+        video_center_y = self.standard_video_height / 2
         
-        # Move to position
+        # Transform sequence for center-based scaling:
+        # 1. Move to desired position (this will be the center)
         transform.translate(actual_x, actual_y)
         
-        # Move to center for rotation and scaling
+        # 2. Move to object's local center for rotation and scaling
         transform.translate(video_center_x, video_center_y)
         
-        # Apply rotation
+        # 3. Apply rotation
         transform.rotate(video_item.rotation)
         
-        # Apply scaling
+        # 4. Apply scaling (happens from center now)
         transform.scale(video_item.scale_x, video_item.scale_y)
         
-        # Move back from center
+        # 5. Move back from local center
         transform.translate(-video_center_x, -video_center_y)
 
+        # Apply the transform
         video_item.video_item.setTransform(transform)
         
         print(f"Applied transform to {video_id} - Pos: ({actual_x:.1f}, {actual_y:.1f}), "
@@ -425,17 +442,8 @@ class VideoWindow(QMainWindow):
         if not hasattr(self, 'graphics_view') or self.graphics_view is None:
             return
         
-        # Update screen dimensions
-        self.screen_width = self.width()
-        self.screen_height = self.height()
-        
-        # Update scene size
-        self.graphics_scene.setSceneRect(0, 0, self.screen_width, self.screen_height)
-        self.graphics_view.fitInView(self.graphics_scene.sceneRect(), Qt.KeepAspectRatio)
-        
-        # Reapply transformations for all videos with new screen size
-        for video_id in self.videos:
-            self.apply_transformations(video_id)
+        # Update screen dimensions and reapply all transformations
+        self.update_screen_dimensions()
 
 
 # Test the video window independently

@@ -189,12 +189,11 @@
         }
         
         .video-box {
-            width: 50px;
-            height: 50px;
             position: absolute;
             transform-origin: center center;
             transition: all 0.1s ease;
-            border: 2px solid transparent;
+            border: 2px solid #ccc;
+            background: #333;
         }
         
         .video-box.selected {
@@ -397,16 +396,16 @@
                             <div class="slider-group">
                                 <label for="posX">X Position</label>
                                 <div class="slider-container">
-                                    <input type="range" id="posX" class="slider" min="-5000" max="5000" step="'0.001" value="200">
-                                    <input type="number" id="posXInput" class="number-input" min="0" max="800" step="'0.001" value="200">
+                                    <input type="range" id="posX" class="slider" min="-5000" max="5000" step="0.1" value="200">
+                                    <input type="number" id="posXInput" class="number-input" min="0" max="800" step="0.1" value="200">
                                 </div>
                                 <div class="value-display" id="posXValue">200</div>
                             </div>
                             <div class="slider-group">
                                 <label for="posY">Y Position</label>
                                 <div class="slider-container">
-                                    <input type="range" id="posY" class="slider" min="-5000" max="5000" value="150">
-                                    <input type="number" id="posYInput" class="number-input" min="0" max="600" value="150">
+                                    <input type="range" id="posY" class="slider" min="-5000" max="5000" step="0.1" value="150">
+                                    <input type="number" id="posYInput" class="number-input" min="0" max="600" step="0.1" value="150">
                                 </div>
                                 <div class="value-display" id="posYValue">150</div>
                             </div>
@@ -850,7 +849,7 @@
             }
         }
         
-        // Create video preview element
+        // Create video preview element - FIXED VERSION
         function createVideoPreview(videoId) {
             const video = videos[videoId];
             const videoBox = document.createElement('div');
@@ -858,12 +857,21 @@
             videoBox.className = 'video-box';
             videoBox.onclick = () => selectVideo(videoId);
             
+            // Set initial size - this should match your standard video size ratio
+            videoBox.style.width = '50px';  // This represents the base size
+            videoBox.style.height = '37.5px'; // Maintains 200:150 ratio (4:3)
+            videoBox.style.position = 'absolute';
+            videoBox.style.transformOrigin = 'center center'; // Ensure scaling from center
+            
             const videoElement = document.createElement('video');
             videoElement.className = 'video-preview';
             videoElement.src = video.preview_url;
             videoElement.loop = true;
             videoElement.muted = true;
             videoElement.autoplay = true;
+            videoElement.style.width = '100%';
+            videoElement.style.height = '100%';
+            videoElement.style.objectFit = 'cover';
             
             videoBox.appendChild(videoElement);
             previewArea.appendChild(videoBox);
@@ -871,25 +879,30 @@
             updateVideoPreview(videoId);
         }
         
-        // Update video preview position
+        // Update video preview position - FIXED VERSION
         function updateVideoPreview(videoId) {
             const video = videos[videoId];
             const videoBox = document.getElementById(`video-preview-${videoId}`);
             
             if (videoBox && video) {
+                // Calculate preview position (normalized coordinates to preview area)
                 const previewX = (video.x / 400) * previewArea.offsetWidth;
                 const previewY = (video.y / 300) * previewArea.offsetHeight;
                 
+                // Set position to center of the video box
                 videoBox.style.left = previewX + 'px';
                 videoBox.style.top = previewY + 'px';
+                
+                // Apply transformations: translate to center, then scale and rotate
+                // This matches exactly what the PyQt code does now
                 videoBox.style.transform = `translate(-50%, -50%) scale(${video.scale_x}, ${video.scale_y}) rotate(${video.rotation}deg)`;
             }
         }
         
         // Update value displays
         function updateValueDisplays() {
-            posXValue.textContent = posX.value;
-            posYValue.textContent = posY.value;
+            posXValue.textContent = parseFloat(posX.value).toFixed(1);
+            posYValue.textContent = parseFloat(posY.value).toFixed(1);
             scaleXValue.textContent = parseFloat(scaleX.value).toFixed(2);
             scaleYValue.textContent = parseFloat(scaleY.value).toFixed(2);
             rotationValue.textContent = rotation.value + '°';
@@ -962,23 +975,23 @@
         // Debounced send functions
         const debouncedSendPosition = debounce(() => {
             sendCommand('position', {
-                x: parseInt(posX.value),
-                y: parseInt(posY.value)
+                x: parseFloat(posX.value),
+                y: parseFloat(posY.value)
             });
-        }, 300);
+        }, 100);
         
         const debouncedSendScale = debounce(() => {
             sendCommand('scale', {
                 x: parseFloat(scaleX.value),
                 y: parseFloat(scaleY.value)
             });
-        }, 300);
+        }, 100);
         
         const debouncedSendRotation = debounce(() => {
             sendCommand('rotation', {
-                z: parseInt(rotation.value)
+                z: parseFloat(rotation.value)
             });
-        }, 300);
+        }, 100);
         
         // Sync functions
         function syncPositionX(fromInput = false) {
@@ -1079,34 +1092,13 @@
                 
                 if (data.videos) {
                     data.videos.forEach(video => {
-                        videos[video.id] = video;
-                        createVideoPreview(video.id);
-                    });
-                    updateVideoList();
-                    updateControlPanel();
-                }
-            } catch (error) {
-                console.error('Failed to load existing videos:', error);
-            }
-        }
-        async function loadExistingVideos() {
-            try {
-                const response = await fetch('/get-videos');
-                const data = await response.json();
-                
-                if (data.videos) {
-                    data.videos.forEach(video => {
-                        // Convert screen coordinates back to normalized coordinates for UI
-                        const normalizedX = (video.x / screenWidth) * 400;
-                        const normalizedY = (video.y / screenHeight) * 300;
-                        
                         videos[video.id] = {
                             id: video.id,
-                            name: video.name,
-                            filepath: video.filepath,
-                            preview_url: video.preview_url,
-                            x: normalizedX,
-                            y: normalizedY,
+                            name: video.filename,
+                            filepath: video.file_path,
+                            preview_url: `/video-preview/${video.filename}`,
+                            x: video.x,
+                            y: video.y,
                             scale_x: video.scale_x,
                             scale_y: video.scale_y,
                             rotation: video.rotation
@@ -1126,6 +1118,28 @@
                 console.error('Failed to load existing videos:', error);
             }
         }
+        
+        // DEBUG FUNCTION - Add this to test coordinate alignment
+        function debugCoordinates(videoId) {
+            const video = videos[videoId];
+            if (!video) return;
+            
+            console.log(`Debug for video ${videoId}:`);
+            console.log(`- Slider values: x=${video.x}, y=${video.y}, scale_x=${video.scale_x}, scale_y=${video.scale_y}, rotation=${video.rotation}`);
+            console.log(`- Screen dimensions: ${screenWidth}x${screenHeight}`);
+            console.log(`- Preview area: ${previewArea.offsetWidth}x${previewArea.offsetHeight}`);
+            
+            // Calculate what the actual PyQt coordinates should be
+            const actual_x = (video.x / 400.0) * screenWidth;
+            const actual_y = (video.y / 300.0) * screenHeight;
+            console.log(`- Calculated PyQt position: (${actual_x}, ${actual_y})`);
+            
+            // Calculate preview position
+            const previewX = (video.x / 400) * previewArea.offsetWidth;
+            const previewY = (video.y / 300) * previewArea.offsetHeight;
+            console.log(`- Preview position: (${previewX}, ${previewY})`);
+        }
+        
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', () => {
             fetchScreenDimensions();

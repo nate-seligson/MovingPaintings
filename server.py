@@ -36,6 +36,7 @@ def allowed_file(filename):
     """Check if file extension is allowed"""
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
 def get_screen_dimensions():
     """Get the screen dimensions from the Qt window"""
     global window
@@ -272,6 +273,7 @@ def swap_video():
         import traceback
         traceback.print_exc()
         return jsonify({"error": f"Failed to swap video: {str(e)}"}), 500
+
 @app.route('/get-videos')
 def get_videos():
     """Get list of all videos"""
