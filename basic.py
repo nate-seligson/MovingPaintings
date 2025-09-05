@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import (
     QPushButton, QLabel, QFileDialog, QSlider, QGraphicsView, QGraphicsScene
 )
 from PyQt5.QtCore import Qt, QUrl, QSizeF
-from PyQt5.QtGui import QFont
+from PyQt5.QtGui import QFont, QTransform
 from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent, QMediaPlaylist
 from PyQt5.QtMultimediaWidgets import QGraphicsVideoItem
 
@@ -15,10 +15,11 @@ class TestWindow(QMainWindow):
         super().__init__()
 
         # --- EDIT THESE to change video transform in code (not via GUI) ---
-        self.video_x = 50             # x position (pixels) inside the graphics scene
-        self.video_y = 30             # y position (pixels) inside the graphics scene
+        self.video_x = 50             # x position in scene
+        self.video_y = 30             # y position in scene
         self.video_rotation = 15      # rotation in degrees
-        self.video_scale = 1.2        # scale multiplier (1.0 = original size)
+        self.scale_x = 1.2            # horizontal scale
+        self.scale_y = 0.8            # vertical scale
         # ------------------------------------------------------------------
 
         self.initUI()
@@ -37,7 +38,7 @@ class TestWindow(QMainWindow):
         title.setFont(QFont('Arial', 16, QFont.Bold))
         self.layout.addWidget(title)
 
-        # Graphics view + scene + video item (allows transforms)
+        # Graphics view + scene + video item
         self.graphics_view = QGraphicsView()
         self.graphics_scene = QGraphicsScene(self)
         self.graphics_view.setScene(self.graphics_scene)
@@ -46,15 +47,13 @@ class TestWindow(QMainWindow):
         # Media player + playlist (loop)
         self.media_player = QMediaPlayer(None, QMediaPlayer.VideoSurface)
         self.playlist = QMediaPlaylist()
-        self.playlist.setPlaybackMode(QMediaPlaylist.Loop)  # loop forever
+        self.playlist.setPlaybackMode(QMediaPlaylist.Loop)
         self.media_player.setPlaylist(self.playlist)
 
-        # Video item (rendered inside the graphics scene)
+        # Video item
         self.video_item = QGraphicsVideoItem()
-        # initial size -- will be updated on resize / load
         self.video_item.setSize(QSizeF(640, 360))
         self.graphics_scene.addItem(self.video_item)
-        # route player output to the graphics video item
         self.media_player.setVideoOutput(self.video_item)
 
         # Controls
@@ -99,21 +98,17 @@ class TestWindow(QMainWindow):
         if not file_path:
             return
 
-        # Clear playlist and add new media (playlist set to Loop)
         self.playlist.clear()
         self.playlist.addMedia(QMediaContent(QUrl.fromLocalFile(file_path)))
         self.playlist.setCurrentIndex(0)
 
-        # Update info + enable controls
         self.video_info.setText(f"Loaded: {os.path.basename(file_path)}")
         self.play_btn.setEnabled(True)
         self.stop_btn.setEnabled(True)
 
-        # Make sure video item size matches view's viewport (and then apply transforms)
         self.update_video_item_size()
         self.apply_transformations()
 
-        # Start playing immediately (optional); comment out if you prefer manual Play
         self.media_player.play()
         self.play_btn.setText("Pause")
 
@@ -136,7 +131,6 @@ class TestWindow(QMainWindow):
             self.play_btn.setText("Play")
 
     def position_changed(self, position):
-        # update slider (position in milliseconds)
         self.position_slider.setValue(position)
 
     def duration_changed(self, duration):
@@ -147,31 +141,22 @@ class TestWindow(QMainWindow):
 
     def apply_transformations(self):
         """
-        Apply the position, rotation and scale from the variables defined in __init__.
-        This happens in code only — there are no GUI controls for these.
+        Apply position, rotation, and independent scale_x/scale_y.
         """
-        # position: setPos expects coordinates in the scene
-        self.video_item.setPos(self.video_x, self.video_y)
-        # rotation: degrees
-        self.video_item.setRotation(self.video_rotation)
-        # scale: simple uniform scaling
-        self.video_item.setScale(self.video_scale)
+        transform = QTransform()
+        transform.translate(self.video_x, self.video_y)
+        transform.rotate(self.video_rotation)
+        transform.scale(self.scale_x, self.scale_y)
+        self.video_item.setTransform(transform)
 
     def update_video_item_size(self):
-        """
-        Resize the QGraphicsVideoItem to fit the graphics view viewport (before scaling).
-        """
         viewport_size = self.graphics_view.viewport().size()
         if viewport_size.width() > 0 and viewport_size.height() > 0:
             self.video_item.setSize(QSizeF(viewport_size.width(), viewport_size.height()))
 
     def resizeEvent(self, event):
-        """
-        Keep the video item sized to the view when the window is resized.
-        We reapply transformations afterward so scale/position remain correct.
-        """
         super().resizeEvent(event)
-        self.graphics_view.fitInView(self.graphics_scene.sceneRect(), Qt.KeepAspectRatio)  # optional
+        self.graphics_view.fitInView(self.graphics_scene.sceneRect(), Qt.KeepAspectRatio)
         self.update_video_item_size()
         self.apply_transformations()
 
