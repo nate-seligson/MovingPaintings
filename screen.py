@@ -11,7 +11,7 @@ class VideoWindow(QMainWindow):
         super().__init__()
 
         # --- EDIT THIS to set the video file path ---
-        self.video_file = "./65562-515098354_medium.mp4"  # <--- change this
+        self.video_file = "/home/pil/Downloads/MovingPaintings/65562-515098354_medium.mp4"  # <--- change this
         # ------------------------------------------------------------------
 
         # --- EDIT THESE to set transform in code ---
