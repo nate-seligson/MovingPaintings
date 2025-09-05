@@ -189,18 +189,21 @@ def status():
 
 def get_lan_ip():
     """
-    Detects LAN IP address of the machine.
-    Falls back to 127.0.0.1 if not found.
+    Returns LAN IP of the machine and the hostname.
     """
     try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        # Doesn't need to connect; dummy IP
-        s.connect(("10.255.255.255", 1))
-        ip = s.getsockname()[0]
-        s.close()
+        hostname = socket.gethostname()
+        ip = socket.gethostbyname(hostname)
+        # If the IP looks like localhost, fallback to dummy connect
+        if ip.startswith("127."):
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("10.255.255.255", 1))
+            ip = s.getsockname()[0]
+            s.close()
         return ip
     except:
         return "127.0.0.1"
+
 # ----------------------- Main -----------------------
 if __name__ == '__main__':
     print("Starting Multi-Video Control Server...")
