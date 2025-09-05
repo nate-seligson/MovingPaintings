@@ -100,23 +100,3 @@ class VideoWindow(QMainWindow):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self.apply_transformations()
-
-
-def main():
-    app = QApplication(sys.argv)
-    window = VideoWindow()
-    window.show()
-
-    # Example of moving the video after startup
-    # Moves it 200 pixels right and 100 pixels down
-    window.set_video_position(200, 100)
-    # Example of scaling
-    window.set_video_scale(0.5, 0.5)
-    # Example of rotating
-    window.set_video_rotation(15)
-
-    sys.exit(app.exec_())
-
-
-if __name__ == '__main__':
-    main()
