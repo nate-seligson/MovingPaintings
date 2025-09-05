@@ -1089,7 +1089,43 @@
                 console.error('Failed to load existing videos:', error);
             }
         }
-        
+        async function loadExistingVideos() {
+            try {
+                const response = await fetch('/get-videos');
+                const data = await response.json();
+                
+                if (data.videos) {
+                    data.videos.forEach(video => {
+                        // Convert screen coordinates back to normalized coordinates for UI
+                        const normalizedX = (video.x / screenWidth) * 400;
+                        const normalizedY = (video.y / screenHeight) * 300;
+                        
+                        videos[video.id] = {
+                            id: video.id,
+                            name: video.name,
+                            filepath: video.filepath,
+                            preview_url: video.preview_url,
+                            x: normalizedX,
+                            y: normalizedY,
+                            scale_x: video.scale_x,
+                            scale_y: video.scale_y,
+                            rotation: video.rotation
+                        };
+                        
+                        createVideoPreview(video.id);
+                    });
+                    updateVideoList();
+                    updateControlPanel();
+                    
+                    // If there are videos, select the first one
+                    if (Object.keys(videos).length > 0) {
+                        selectVideo(Object.keys(videos)[0]);
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to load existing videos:', error);
+            }
+        }
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', () => {
             fetchScreenDimensions();

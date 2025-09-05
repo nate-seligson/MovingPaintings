@@ -250,6 +250,9 @@ def swap_video():
         if not new_filepath or not os.path.exists(new_filepath):
             return jsonify({"error": "New video file not found"}), 400
         
+        # Get the old file path to delete it later
+        old_filepath = videos_db[video_id]['filepath']
+        
         # Swap video in Qt window
         video_controller.video_swapped.emit(video_id, new_filepath)
         
@@ -261,6 +264,14 @@ def swap_video():
         # Update preview URL
         preview_filename = os.path.basename(new_filepath)
         videos_db[video_id]['preview_url'] = f"/video-preview/{preview_filename}"
+        
+        # Delete the old video file
+        try:
+            if os.path.exists(old_filepath) and old_filepath != new_filepath:
+                os.remove(old_filepath)
+                print(f"Deleted old video file: {old_filepath}")
+        except Exception as e:
+            print(f"Warning: Could not delete old video file {old_filepath}: {e}")
         
         print(f"Swapped video {video_id} from '{old_name}' to '{new_filename}'")
         
@@ -274,7 +285,6 @@ def swap_video():
         import traceback
         traceback.print_exc()
         return jsonify({"error": f"Failed to swap video: {str(e)}"}), 500
-
 @app.route('/get-videos')
 def get_videos():
     """Get list of all videos"""
