@@ -12,12 +12,16 @@ class VideoWindow(QMainWindow):
 
         self.video_file = "/home/pil/Downloads/MovingPaintings/65562-515098354_medium.mp4"
 
-        # Transform params
-        self.video_x = 0
-        self.video_y = 0
+        # Transform parameters
+        self.video_x = 0  # horizontal position offset in pixels
+        self.video_y = 0  # vertical position offset in pixels
         self.video_rotation = 0
         self.scale_x = 1.0
         self.scale_y = 1.0
+
+        # Initialize attributes
+        self.video_item = None
+        self.media_player = None
 
         self.initUI()
 
@@ -50,25 +54,49 @@ class VideoWindow(QMainWindow):
 
         self.media_player.setVideoOutput(self.video_item)
 
-        # Wait for metadata to be available
+        # Connect metadata signal to set video size once loaded
         self.media_player.metaDataChanged.connect(self.on_metadata_changed)
         self.media_player.play()
 
     def on_metadata_changed(self):
-        # Only proceed if resolution is available
+        if self.video_item is None:
+            return
         video_size = self.media_player.metaData("Resolution")
-        if video_size is not None:
+        if video_size:
             self.video_item.setSize(QSizeF(video_size.width(), video_size.height()))
             self.apply_transformations()
 
     def apply_transformations(self):
+        """Apply position, scale, and rotation."""
+        if self.video_item is None:
+            return
         transform = QTransform()
+        # Translate first to move video
         transform.translate(self.video_x, self.video_y)
+        # Rotate around top-left corner
         transform.rotate(self.video_rotation)
+        # Scale from top-left corner
         transform.scale(self.scale_x, self.scale_y)
         self.video_item.setTransform(transform)
 
-    # Keep video pixel size constant on resize
+    # Methods to update video properties
+    def set_video_position(self, x: float, y: float):
+        """Move video to pixel coordinates (x, y)."""
+        self.video_x = x
+        self.video_y = y
+        self.apply_transformations()
+
+    def set_video_scale(self, scale_x: float, scale_y: float):
+        """Scale video independently in X and Y."""
+        self.scale_x = scale_x
+        self.scale_y = scale_y
+        self.apply_transformations()
+
+    def set_video_rotation(self, angle: float):
+        """Rotate video in degrees."""
+        self.video_rotation = angle
+        self.apply_transformations()
+
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self.apply_transformations()
@@ -78,6 +106,15 @@ def main():
     app = QApplication(sys.argv)
     window = VideoWindow()
     window.show()
+
+    # Example of moving the video after startup
+    # Moves it 200 pixels right and 100 pixels down
+    window.set_video_position(200, 100)
+    # Example of scaling
+    window.set_video_scale(0.5, 0.5)
+    # Example of rotating
+    window.set_video_rotation(15)
+
     sys.exit(app.exec_())
 
 
