@@ -318,8 +318,8 @@
         
         // Reset all values
         function resetAll() {
-            posX.value = 200;
-            posY.value = 150;
+            posX.value = 0;
+            posY.value = 0;
             scaleX.value = 1;
             scaleY.value = 1;
             rotation.value = 0;
@@ -328,7 +328,7 @@
             updatePreview();
             
             // Send reset commands
-            sendCommand('position', { x: 200, y: 150 });
+            sendCommand('position', { x: 0, y: 0 });
             sendCommand('scale', { x: 1.0, y: 1.0 });
             sendCommand('rotation', { z: 0 });
         }
