@@ -192,9 +192,20 @@ if __name__ == '__main__':
     port = 5000
 
     # Detect public IP
+    # Detect public IP
     try:
         public_ip = requests.get("https://api.ipify.org").text.strip()
+        public_ip = requests.get("https://api.ipify.org").text.strip()
     except Exception as e:
+        print(f"Could not fetch public IP: {e}")
+        public_ip = "UNKNOWN"
+
+    print(f"\nFlask server is running!")
+    print(f"Access (LAN/private): http://127.0.0.1:{port}/local")
+    print(f"Access (Public):      http://{public_ip}:{port}/local\n")
+
+    # Start server on all interfaces (LAN + WAN)
+    app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
         print(f"Could not fetch public IP: {e}")
         public_ip = "UNKNOWN"
 
