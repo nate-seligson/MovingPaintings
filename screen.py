@@ -10,7 +10,9 @@ class VideoWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
+        # Default video file - will be overridden if a new video is loaded
         self.video_file = "/home/pil/Downloads/MovingPaintings/65562-515098354_medium.mp4"
+        self.current_video_file = self.video_file  # Keep track of current video
 
         # Transform parameters - these will be set by the HTML interface
         self.video_x = 0  # horizontal position offset (0-1 normalized)
@@ -28,6 +30,7 @@ class VideoWindow(QMainWindow):
         # Initialize attributes
         self.video_item = None
         self.media_player = None
+        self.playlist = None  # Make playlist accessible
 
         self.initUI()
 
@@ -63,15 +66,51 @@ class VideoWindow(QMainWindow):
         self.playlist = QMediaPlaylist()
         self.playlist.setPlaybackMode(QMediaPlaylist.Loop)
         self.media_player.setPlaylist(self.playlist)
-        self.playlist.addMedia(QMediaContent(QUrl.fromLocalFile(self.video_file)))
-        self.playlist.setCurrentIndex(0)
+        
+        # Load initial video
+        self.load_video(self.video_file)
 
         self.media_player.setVideoOutput(self.video_item)
 
         # Connect signals
         self.media_player.metaDataChanged.connect(self.on_metadata_changed)
         self.media_player.mediaStatusChanged.connect(self.on_media_status_changed)
+        self.media_player.error.connect(self.on_media_error)
         self.media_player.play()
+
+    def load_video(self, file_path):
+        """Load a video file into the playlist"""
+        try:
+            # Clear existing playlist
+            self.playlist.clear()
+            
+            # Add new video
+            self.playlist.addMedia(QMediaContent(QUrl.fromLocalFile(file_path)))
+            self.playlist.setCurrentIndex(0)
+            
+            # Update current video file
+            self.current_video_file = file_path
+            
+            # Reset video dimensions to trigger recalculation
+            self.video_width = 0
+            self.video_height = 0
+            
+            print(f"Loaded video: {file_path}")
+            return True
+            
+        except Exception as e:
+            print(f"Error loading video: {e}")
+            return False
+
+    def change_video(self, file_path):
+        """Change to a new video file (called from Flask server)"""
+        if self.load_video(file_path):
+            # Restart playback
+            self.media_player.stop()
+            self.media_player.play()
+            print(f"Video changed successfully to: {file_path}")
+            return True
+        return False
 
     def on_metadata_changed(self):
         """Handle metadata changes to get video dimensions"""
@@ -98,6 +137,23 @@ class VideoWindow(QMainWindow):
                 self.video_height = 480
                 print("Using default video size: 640x480")
             self.apply_transformations()
+        elif status == QMediaPlayer.InvalidMedia:
+            print(f"Invalid media: {self.current_video_file}")
+        elif status == QMediaPlayer.EndOfMedia:
+            # This shouldn't happen with Loop mode, but just in case
+            self.media_player.play()
+
+    def on_media_error(self):
+        """Handle media player errors"""
+        error = self.media_player.error()
+        error_string = self.media_player.errorString()
+        print(f"Media player error ({error}): {error_string}")
+        
+        # Try to fallback to default video if available
+        if self.current_video_file != self.video_file:
+            print("Attempting to load default video as fallback...")
+            self.load_video(self.video_file)
+            self.media_player.play()
 
     def apply_transformations(self):
         """Apply position, scale, and rotation transformations"""
@@ -161,6 +217,10 @@ class VideoWindow(QMainWindow):
         self.video_rotation = float(angle)
         print(f"Setting rotation: {angle}°")
         self.apply_transformations()
+
+    def get_screen_dimensions(self):
+        """Return the current screen dimensions"""
+        return self.screen_width, self.screen_height
 
     def resizeEvent(self, event):
         """Handle window resize events"""

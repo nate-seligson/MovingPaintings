@@ -12,7 +12,7 @@
         }
         
         .container {
-            max-width: 800px;
+            max-width: 900px;
             margin: 0 auto;
             background: white;
             padding: 20px;
@@ -20,14 +20,26 @@
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
         
-        .preview-area {
-            width: 400px;
-            height: 300px;
-            border: 2px solid #ccc;
+        .preview-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
             margin: 20px auto;
+        }
+        
+        .preview-area {
+            width: 600px;
+            height: 400px;
+            border: 2px solid #ccc;
             position: relative;
             overflow: hidden;
             background: #f9f9f9;
+        }
+        
+        .screen-info {
+            margin-top: 10px;
+            font-size: 12px;
+            color: #666;
         }
         
         .video-box {
@@ -39,6 +51,46 @@
             left: 50%;
             transform-origin: center center;
             transition: all 0.1s ease;
+        }
+        
+        .video-preview {
+            position: absolute;
+            width: 50px;
+            height: 50px;
+            object-fit: cover;
+            display: none;
+        }
+        
+        .upload-section {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f8f8f8;
+            border-radius: 8px;
+        }
+        
+        .upload-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .upload-btn {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        
+        .upload-btn:hover {
+            background: #218838;
+        }
+        
+        .upload-btn:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
         }
         
         .controls {
@@ -69,15 +121,30 @@
             font-weight: bold;
         }
         
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
         .slider {
-            width: 100%;
+            flex: 1;
             margin-bottom: 5px;
+        }
+        
+        .number-input {
+            width: 80px;
+            padding: 4px 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 14px;
         }
         
         .value-display {
             font-size: 12px;
             color: #666;
             text-align: center;
+            margin-top: 5px;
         }
         
         .status {
@@ -99,6 +166,12 @@
             border: 1px solid #f5c6cb;
         }
         
+        .status.info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
         .reset-btn {
             background: #dc3545;
             color: white;
@@ -112,16 +185,50 @@
         .reset-btn:hover {
             background: #c82333;
         }
+        
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-top: 10px;
+            display: none;
+        }
+        
+        .progress-bar-fill {
+            height: 100%;
+            background: #007bff;
+            transition: width 0.3s ease;
+            width: 0%;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Video Control Interface</h1>
-        <p>Adjust the sliders to control the position, scale, and rotation of the video. Changes are sent automatically to the Flask server.</p>
+        <p>Adjust the sliders or enter values to control the position, scale, and rotation of the video.</p>
+        
+        <!-- Video Upload Section -->
+        <div class="upload-section">
+            <h3>Upload Video</h3>
+            <div class="upload-controls">
+                <input type="file" id="videoFile" accept="video/*" />
+                <button class="upload-btn" onclick="uploadVideo()">Upload Video</button>
+                <span id="uploadStatus"></span>
+            </div>
+            <div class="progress-bar" id="progressBar">
+                <div class="progress-bar-fill" id="progressFill"></div>
+            </div>
+        </div>
         
         <!-- Preview Area -->
-        <div class="preview-area">
-            <div id="videoBox" class="video-box"></div>
+        <div class="preview-container">
+            <div id="previewArea" class="preview-area">
+                <div id="videoBox" class="video-box"></div>
+                <video id="videoPreview" class="video-preview" loop muted></video>
+            </div>
+            <div class="screen-info" id="screenInfo">Screen: Loading...</div>
         </div>
         
         <!-- Controls -->
@@ -131,12 +238,18 @@
                 <h3>Position</h3>
                 <div class="slider-group">
                     <label for="posX">X Position</label>
-                    <input type="range" id="posX" class="slider" min="0" max="400" value="200">
+                    <div class="slider-container">
+                        <input type="range" id="posX" class="slider" min="0" max="400" value="200">
+                        <input type="number" id="posXInput" class="number-input" min="0" max="400" value="200">
+                    </div>
                     <div class="value-display" id="posXValue">200</div>
                 </div>
                 <div class="slider-group">
                     <label for="posY">Y Position</label>
-                    <input type="range" id="posY" class="slider" min="0" max="300" value="150">
+                    <div class="slider-container">
+                        <input type="range" id="posY" class="slider" min="0" max="300" value="150">
+                        <input type="number" id="posYInput" class="number-input" min="0" max="300" value="150">
+                    </div>
                     <div class="value-display" id="posYValue">150</div>
                 </div>
             </div>
@@ -146,13 +259,19 @@
                 <h3>Scale</h3>
                 <div class="slider-group">
                     <label for="scaleX">X Scale</label>
-                    <input type="range" id="scaleX" class="slider" min="0.1" max="2" step="0.1" value="1">
-                    <div class="value-display" id="scaleXValue">1.0</div>
+                    <div class="slider-container">
+                        <input type="range" id="scaleX" class="slider" min="0.1" max="2" step="0.01" value="1">
+                        <input type="number" id="scaleXInput" class="number-input" min="0.1" max="2" step="0.01" value="1">
+                    </div>
+                    <div class="value-display" id="scaleXValue">1.00</div>
                 </div>
                 <div class="slider-group">
                     <label for="scaleY">Y Scale</label>
-                    <input type="range" id="scaleY" class="slider" min="0.1" max="2" step="0.1" value="1">
-                    <div class="value-display" id="scaleYValue">1.0</div>
+                    <div class="slider-container">
+                        <input type="range" id="scaleY" class="slider" min="0.1" max="2" step="0.01" value="1">
+                        <input type="number" id="scaleYInput" class="number-input" min="0.1" max="2" step="0.01" value="1">
+                    </div>
+                    <div class="value-display" id="scaleYValue">1.00</div>
                 </div>
             </div>
         </div>
@@ -162,7 +281,10 @@
             <h3>Rotation</h3>
             <div class="slider-group">
                 <label for="rotation">Rotation (degrees)</label>
-                <input type="range" id="rotation" class="slider" min="0" max="360" value="0">
+                <div class="slider-container">
+                    <input type="range" id="rotation" class="slider" min="0" max="360" value="0">
+                    <input type="number" id="rotationInput" class="number-input" min="0" max="360" value="0">
+                </div>
                 <div class="value-display" id="rotationValue">0°</div>
             </div>
             <button class="reset-btn" onclick="resetAll()">Reset All</button>
@@ -180,6 +302,12 @@
         const scaleY = document.getElementById('scaleY');
         const rotation = document.getElementById('rotation');
         
+        const posXInput = document.getElementById('posXInput');
+        const posYInput = document.getElementById('posYInput');
+        const scaleXInput = document.getElementById('scaleXInput');
+        const scaleYInput = document.getElementById('scaleYInput');
+        const rotationInput = document.getElementById('rotationInput');
+        
         const posXValue = document.getElementById('posXValue');
         const posYValue = document.getElementById('posYValue');
         const scaleXValue = document.getElementById('scaleXValue');
@@ -187,7 +315,57 @@
         const rotationValue = document.getElementById('rotationValue');
         
         const videoBox = document.getElementById('videoBox');
+        const videoPreview = document.getElementById('videoPreview');
         const status = document.getElementById('status');
+        const previewArea = document.getElementById('previewArea');
+        const screenInfo = document.getElementById('screenInfo');
+        
+        let screenWidth = 1920;
+        let screenHeight = 1080;
+        let previewScale = 1;
+        
+        // Fetch screen dimensions from server
+        async function fetchScreenDimensions() {
+            try {
+                const response = await fetch('/screen-dimensions');
+                const data = await response.json();
+                screenWidth = data.width;
+                screenHeight = data.height;
+                
+                // Calculate aspect ratio and resize preview area
+                const aspectRatio = screenWidth / screenHeight;
+                const maxWidth = 600;
+                const maxHeight = 400;
+                
+                let newWidth, newHeight;
+                if (aspectRatio > maxWidth / maxHeight) {
+                    newWidth = maxWidth;
+                    newHeight = maxWidth / aspectRatio;
+                } else {
+                    newHeight = maxHeight;
+                    newWidth = maxHeight * aspectRatio;
+                }
+                
+                previewArea.style.width = newWidth + 'px';
+                previewArea.style.height = newHeight + 'px';
+                
+                // Calculate scale factor for position mapping
+                previewScale = newWidth / 400;  // Since our sliders go 0-400
+                
+                // Update slider max values based on actual screen ratio
+                posX.max = 400;
+                posXInput.max = 400;
+                posY.max = 300;
+                posYInput.max = 300;
+                
+                screenInfo.textContent = `Screen: ${screenWidth}x${screenHeight} (${aspectRatio.toFixed(2)}:1)`;
+                
+                updatePreview();
+            } catch (error) {
+                console.error('Failed to fetch screen dimensions:', error);
+                screenInfo.textContent = 'Screen: Using defaults (16:9)';
+            }
+        }
         
         // Debounce function to limit API calls
         function debounce(func, wait) {
@@ -210,17 +388,28 @@
             const sy = parseFloat(scaleY.value);
             const rot = parseInt(rotation.value);
             
-            videoBox.style.left = x + 'px';
-            videoBox.style.top = y + 'px';
-            videoBox.style.transform = `translate(-50%, -50%) scale(${sx}, ${sy}) rotate(${rot}deg)`;
+            // Map positions to preview area
+            const previewX = (x / 400) * previewArea.offsetWidth;
+            const previewY = (y / 300) * previewArea.offsetHeight;
+            
+            const elements = [videoBox];
+            if (videoPreview.style.display !== 'none') {
+                elements.push(videoPreview);
+            }
+            
+            elements.forEach(el => {
+                el.style.left = previewX + 'px';
+                el.style.top = previewY + 'px';
+                el.style.transform = `translate(-50%, -50%) scale(${sx}, ${sy}) rotate(${rot}deg)`;
+            });
         }
         
         // Update value displays
         function updateValueDisplays() {
             posXValue.textContent = posX.value;
             posYValue.textContent = posY.value;
-            scaleXValue.textContent = parseFloat(scaleX.value).toFixed(1);
-            scaleYValue.textContent = parseFloat(scaleY.value).toFixed(1);
+            scaleXValue.textContent = parseFloat(scaleX.value).toFixed(2);
+            scaleYValue.textContent = parseFloat(scaleY.value).toFixed(2);
             rotationValue.textContent = rotation.value + '°';
         }
         
@@ -262,6 +451,76 @@
             }, 3000);
         }
         
+        // Upload video function
+        async function uploadVideo() {
+            const fileInput = document.getElementById('videoFile');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                showStatus('Please select a video file', 'error');
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('video', file);
+            
+            const progressBar = document.getElementById('progressBar');
+            const progressFill = document.getElementById('progressFill');
+            const uploadBtn = document.querySelector('.upload-btn');
+            
+            progressBar.style.display = 'block';
+            uploadBtn.disabled = true;
+            
+            try {
+                const xhr = new XMLHttpRequest();
+                
+                xhr.upload.addEventListener('progress', (e) => {
+                    if (e.lengthComputable) {
+                        const percentComplete = (e.loaded / e.total) * 100;
+                        progressFill.style.width = percentComplete + '%';
+                    }
+                });
+                
+                xhr.addEventListener('load', () => {
+                    if (xhr.status === 200) {
+                        const result = JSON.parse(xhr.responseText);
+                        showStatus('Video uploaded successfully!', 'success');
+                        
+                        // Update preview with uploaded video
+                        if (result.preview_url) {
+                            videoPreview.src = result.preview_url;
+                            videoPreview.style.display = 'block';
+                            videoBox.style.display = 'none';
+                            videoPreview.play();
+                        }
+                    } else {
+                        const error = JSON.parse(xhr.responseText);
+                        showStatus(error.error || 'Upload failed', 'error');
+                    }
+                    
+                    progressBar.style.display = 'none';
+                    progressFill.style.width = '0%';
+                    uploadBtn.disabled = false;
+                });
+                
+                xhr.addEventListener('error', () => {
+                    showStatus('Upload failed: Network error', 'error');
+                    progressBar.style.display = 'none';
+                    progressFill.style.width = '0%';
+                    uploadBtn.disabled = false;
+                });
+                
+                xhr.open('POST', '/upload-video');
+                xhr.send(formData);
+                
+            } catch (error) {
+                showStatus('Upload failed: ' + error.message, 'error');
+                progressBar.style.display = 'none';
+                progressFill.style.width = '0%';
+                uploadBtn.disabled = false;
+            }
+        }
+        
         // Debounced functions for each control type
         const debouncedSendPosition = debounce(() => {
             sendCommand('position', {
@@ -283,58 +542,106 @@
             });
         }, 300);
         
-        // Event listeners for position
-        posX.addEventListener('input', () => {
+        // Sync slider and input functions
+        function syncPositionX(fromInput = false) {
+            if (fromInput) {
+                posX.value = posXInput.value;
+            } else {
+                posXInput.value = posX.value;
+            }
             updateValueDisplays();
             updatePreview();
             debouncedSendPosition();
-        });
+        }
         
-        posY.addEventListener('input', () => {
+        function syncPositionY(fromInput = false) {
+            if (fromInput) {
+                posY.value = posYInput.value;
+            } else {
+                posYInput.value = posY.value;
+            }
             updateValueDisplays();
             updatePreview();
             debouncedSendPosition();
-        });
+        }
         
-        // Event listeners for scale
-        scaleX.addEventListener('input', () => {
+        function syncScaleX(fromInput = false) {
+            if (fromInput) {
+                scaleX.value = scaleXInput.value;
+            } else {
+                scaleXInput.value = scaleX.value;
+            }
             updateValueDisplays();
             updatePreview();
             debouncedSendScale();
-        });
+        }
         
-        scaleY.addEventListener('input', () => {
+        function syncScaleY(fromInput = false) {
+            if (fromInput) {
+                scaleY.value = scaleYInput.value;
+            } else {
+                scaleYInput.value = scaleY.value;
+            }
             updateValueDisplays();
             updatePreview();
             debouncedSendScale();
-        });
+        }
         
-        // Event listener for rotation
-        rotation.addEventListener('input', () => {
+        function syncRotation(fromInput = false) {
+            if (fromInput) {
+                rotation.value = rotationInput.value;
+            } else {
+                rotationInput.value = rotation.value;
+            }
             updateValueDisplays();
             updatePreview();
             debouncedSendRotation();
-        });
+        }
+        
+        // Event listeners for position
+        posX.addEventListener('input', () => syncPositionX(false));
+        posXInput.addEventListener('input', () => syncPositionX(true));
+        
+        posY.addEventListener('input', () => syncPositionY(false));
+        posYInput.addEventListener('input', () => syncPositionY(true));
+        
+        // Event listeners for scale
+        scaleX.addEventListener('input', () => syncScaleX(false));
+        scaleXInput.addEventListener('input', () => syncScaleX(true));
+        
+        scaleY.addEventListener('input', () => syncScaleY(false));
+        scaleYInput.addEventListener('input', () => syncScaleY(true));
+        
+        // Event listener for rotation
+        rotation.addEventListener('input', () => syncRotation(false));
+        rotationInput.addEventListener('input', () => syncRotation(true));
         
         // Reset all values
         function resetAll() {
-            posX.value = 0;
-            posY.value = 0;
+            posX.value = 200;
+            posY.value = 150;
             scaleX.value = 1;
             scaleY.value = 1;
             rotation.value = 0;
+            
+            posXInput.value = 200;
+            posYInput.value = 150;
+            scaleXInput.value = 1;
+            scaleYInput.value = 1;
+            rotationInput.value = 0;
             
             updateValueDisplays();
             updatePreview();
             
             // Send reset commands
-            sendCommand('position', { x: 0, y: 0 });
+            sendCommand('position', { x: 200, y: 150 });
             sendCommand('scale', { x: 1.0, y: 1.0 });
             sendCommand('rotation', { z: 0 });
         }
         
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', () => {
+            fetchScreenDimensions();
             updateValueDisplays();
             updatePreview();
         });
