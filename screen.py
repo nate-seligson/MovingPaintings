@@ -101,8 +101,13 @@ class VideoWindow(QMainWindow):
 
     def apply_transformations(self):
         """Apply position, scale, and rotation transformations"""
-        if self.video_item is None:
+        if self.video_item is None or not hasattr(self, 'graphics_scene') or self.graphics_scene is None:
             return
+
+        # Make sure we have valid screen dimensions
+        if self.screen_width == 0 or self.screen_height == 0:
+            self.screen_width = self.width() if self.width() > 0 else 1920
+            self.screen_height = self.height() if self.height() > 0 else 1080
 
         # Calculate actual pixel positions from normalized values (0-400 -> 0-screen_width)
         actual_x = (self.video_x / 400.0) * self.screen_width
