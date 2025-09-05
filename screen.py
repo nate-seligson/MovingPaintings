@@ -165,6 +165,16 @@ class VideoWindow(QMainWindow):
     def resizeEvent(self, event):
         """Handle window resize events"""
         super().resizeEvent(event)
+        
+        # Check if UI components are initialized before proceeding
+        if not hasattr(self, 'graphics_scene') or self.graphics_scene is None:
+            print("ResizeEvent called before UI initialization - skipping")
+            return
+            
+        if not hasattr(self, 'graphics_view') or self.graphics_view is None:
+            print("ResizeEvent called before graphics_view initialization - skipping")
+            return
+        
         # Update screen dimensions
         self.screen_width = self.width()
         self.screen_height = self.height()
