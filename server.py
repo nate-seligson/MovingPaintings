@@ -2,7 +2,6 @@ from flask import Flask, send_file, render_template_string, request, jsonify, se
 import requests
 from screen import VideoWindow, VideoController  # Import the updated VideoWindow
 import sys
-import socket
 import threading
 import time
 import os
@@ -439,52 +438,29 @@ def status():
     })
 
 if __name__ == '__main__':
+    import socket
+
     print("Starting Multi-Video Control Server...")
-    print("Enhanced features: Seamless looping + Video swapping")
-    
-    # Start Qt application in a separate daemon thread
-    qt_thread = threading.Thread(target=setup_qt_app, daemon=True)
-    qt_thread.start()
-    
-    # Wait for Qt to initialize
-    print("Waiting for Qt application to initialize...")
-    max_wait = 10  # Wait up to 10 seconds
-    wait_count = 0
-    
-    while video_controller is None and wait_count < max_wait:
-        time.sleep(1)
-        wait_count += 1
-        print(f"Waiting... {wait_count}/{max_wait}")
-    
-    if video_controller is None:
-        print("WARNING: Qt application may not have initialized properly")
-        print("Try restarting the server if videos don't display correctly")
-    else:
-        print("Qt application initialized successfully")
-        print("Enhanced looping mechanisms active:")
-        print("  - Position-based loop detection")
-        print("  - Media status monitoring")
-        print("  - Regular position checking (100ms)")
-        print("  - Backup timer fallback")
-    
-    port = 5000
-    # Detect public IP
+
+    # Detect LAN IP
     try:
-        public_ip = requests.get("https://api.ipify.org").text.strip()
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
     except Exception as e:
-        print(f"Could not fetch public IP: {e}")
-        public_ip = "UNKNOWN"
+        print(f"Could not detect LAN IP, defaulting to 127.0.0.1: {e}")
+        local_ip = "127.0.0.1"
 
-    print(f"\nFlask server is running!")
-    print(f"Access (LAN/private): http://127.0.0.1:{port}/local")
-    print(f"Access (Public):      http://{public_ip}:{port}/local\n")
+    port = 6969
 
-    # Start server on all interfaces (LAN + WAN)
-    app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
+    # Start Flask in a separate daemon thread
+    flask_thread = threading.Thread(
+        target=lambda: app.run(host="0.0.0.0", port=port, debug=False, threaded=True),
+        daemon=True
+    )
+    flask_thread.start()
+    print(f"Flask server started on LAN: http://{local_ip}:{port}/local")
 
-    print(f"\nFlask server is running!")
-    print(f"Access (LAN/private): http://127.0.0.1:{port}/local")
-    print(f"Access (Public):      http://{public_ip}:{port}/local\n")
-
-    # Start server on all interfaces (LAN + WAN)
-    app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
+    # Run Qt in the main thread
+    setup_qt_app()
