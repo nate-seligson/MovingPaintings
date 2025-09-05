@@ -228,8 +228,43 @@ def remove_video():
         traceback.print_exc()
         return jsonify({"error": f"Failed to remove video: {str(e)}"}), 500
 
-@app.route('/get-videos')
-def get_videos():
+@app.route('/swap-video', methods=['POST'])
+def swap_video():
+    """Swap the video file for an existing video while keeping its position"""
+    global video_controller, videos_db
+    
+    if not video_controller:
+        return jsonify({"error": "Video window not initialized"}), 500
+    
+    try:
+        data = request.get_json()
+        video_id = data.get('video_id')
+        new_filepath = data.get('filepath')
+        new_filename = data.get('filename')
+        
+        if not video_id or video_id not in videos_db:
+            return jsonify({"error": "Video not found"}), 400
+        
+        if not new_filepath or not os.path.exists(new_filepath):
+            return jsonify({"error": "New video file not found"}), 400
+        
+        # Swap video in Qt window
+        video_controller.video_swapped.emit(video_id, new_filepath)
+        
+        # Update database with new file info (keep position/scale/rotation)
+        videos_db[video_id]['filepath'] = new_filepath
+        videos_db[video_id]['name'] = new_filename
+        
+        return jsonify({
+            "success": True,
+            "message": f"Video swapped successfully to: {new_filename}"
+        })
+        
+    except Exception as e:
+        print(f"Error swapping video: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": f"Failed to swap video: {str(e)}"}), 500
     """Get list of all videos"""
     try:
         # Get current state from Qt window if available

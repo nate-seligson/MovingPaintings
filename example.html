@@ -624,6 +624,10 @@
                     // Clear selection if this was selected
                     if (selectedVideoId === videoId) {
                         selectedVideoId = null;
+                        // Disable swap button
+                        const swapBtn = document.getElementById('swapVideoBtn');
+                        swapBtn.disabled = true;
+                        swapBtn.style.background = '#6c757d';
                         updateControlPanel();
                     }
                     
