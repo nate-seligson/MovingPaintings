@@ -75,17 +75,10 @@ def control_video():
     except Exception as e:
         return jsonify({"error": f"Error processing command: {str(e)}"}), 500
 
-# Option 1: Serve a local HTML file
+
 @app.route('/local')
 def local_html():
     return send_file('example.html')  # Make sure example.html exists
-
-# Option 2: Serve an external HTML file via URL
-@app.route('/external')
-def external_html():
-    url = 'https://example.com/index.html'  # Replace with your external URL
-    response = requests.get(url)
-    return render_template_string(response.text)
 
 @app.route('/')
 def home():
